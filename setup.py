@@ -14,7 +14,7 @@ requirements = list(map(str.strip, open("requirements.txt").readlines()))
 
 setup(
     name='tairClient',
-    version='0.1.0',
+    version='0.1.2',
     description='a client extends redis.py that gives developers easy access to tair or tairModules',
     author='Cheng Jiang',
     author_email='jiangcheng17@mails.ucas.ac.cn',

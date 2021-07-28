@@ -1,5 +1,7 @@
 # Python client for Tair
 
+> tairClient is still being developed. Please do not use it for any mission critical purpose at this time.
+
 tairClient-py is a package that gives developers easy access to tair or tairModules. The package extends [redis-py](https://github.com/andymccurdy/redis-py)'s interface with Tair's API.
 
 ### Installation
