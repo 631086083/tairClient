@@ -39,7 +39,7 @@ class Client(Redis):
     TAIRHASH_EXHVALS = "EXHVALS"
     TAIRHASH_EXHGETALL = "EXHGETALL"
     TAIRHASH_EXHSCAN = "EXHSCAN"
-    TAIRHASH_DEL = "DEL"
+    TAIRHASH_EXHSCAN_EE = "EXHSCAN"
 
     def __init__(self, *args, **kwargs):
         """
@@ -434,6 +434,23 @@ class Client(Redis):
         if count is not None:
             pieces.extend(['COUNT', count])
         return self.execute_command(self.TAIRHASH_EXHSCAN, *pieces)
+
+    def exhscan_ee(self, name, op, subkey, match=None, count=None):
+        """
+        Used to support the scan operation of the enterprise version of tair
+        :param name: same as hash's key
+        :param op: Used to locate the starting point of the scan
+        :param subkey: Used in conjunction with the op option to set the scanning start position
+        :param match: Used to filter scan results.
+        :param count: The number of values returned each time
+        :return:
+        """
+        pieces = [name, op, subkey]
+        if match is not None:
+            pieces.extend(['MATCH', match])
+        if count is not None:
+            pieces.extend(['COUNT', count])
+        return self.execute_command(self.TAIRHASH_EXHSCAN_EE, *pieces)
 
     def pipeline(self, transaction=True, shard_hint=None):
         """
