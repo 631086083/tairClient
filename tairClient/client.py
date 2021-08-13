@@ -1,4 +1,4 @@
-import datetime
+from datetime import datetime, timedelta
 from redis.client import Redis, Pipeline
 
 from redis._compat import iteritems
@@ -39,7 +39,20 @@ class Client(Redis):
     TAIRHASH_EXHVALS = "EXHVALS"
     TAIRHASH_EXHGETALL = "EXHGETALL"
     TAIRHASH_EXHSCAN = "EXHSCAN"
-    TAIRHASH_DEL = "DEL"
+    TAIRHASH_EXHSCAN_EE = "EXHSCAN"
+
+    TAIRSTRING_CAS = "CAS"
+    TAIRSTRING_CAD = "CAD"
+    TAIRSTRING_EXSET = "EXSET"
+    TAIRSTRING_EXGET = "EXGET"
+    TAIRSTRING_EXSETVER = "EXSETVER"
+    TAIRSTRING_EXINCRBY = "EXINCRBY"
+    TAIRSTRING_EXINCRBYFLOAT = "EXINCRBYFLOAT"
+    TAIRSTRING_EXCAS = "EXCAS"
+    TAIRSTRING_EXCAD = "EXCAD"
+    TAIRSTRING_EXAPPEND = "EXAPPEND"
+    TAIRSTRING_EXPREPEND = "EXPREPEND"
+    TAIRSTRING_EXGAE = "EXGAE"
 
     def __init__(self, *args, **kwargs):
         """
@@ -51,23 +64,23 @@ class Client(Redis):
     def appendExpire(pieces, ex, exat, px, pxat):
         if ex is not None:
             pieces.append('EX')
-            if isinstance(ex, datetime.timedelta):
+            if isinstance(ex, timedelta):
                 ex = int(ex.total_seconds())
             pieces.append(ex)
         if exat is not None:
             pieces.append('EXAT')
-            if isinstance(exat, datetime.timedelta):
-                exat = int(exat.total_seconds())
+            if isinstance(exat, datetime):
+                exat = int(exat.timestamp())
             pieces.append(exat)
         if px is not None:
             pieces.append('PX')
-            if isinstance(px, datetime.timedelta):
+            if isinstance(px, timedelta):
                 px = int(px.total_seconds() * 1000)
             pieces.append(px)
         if pxat is not None:
             pieces.append('PXAT')
-            if isinstance(pxat, datetime.timedelta):
-                pxat = int(pxat.total_seconds() * 1000)
+            if isinstance(pxat, datetime):
+                pxat = int(pxat.timestamp() * 1000)
             pieces.append(pxat)
 
     @staticmethod
@@ -102,6 +115,28 @@ class Client(Redis):
         if maxval is not None:
             pieces.extend(['Max', maxval])
 
+    @staticmethod
+    def appendFlags(pieces, flags):
+        if flags is not None:
+            pieces.extend(["FLAGS", flags])
+
+    @staticmethod
+    def appendWithVersion(pieces, withversion):
+        if withversion:
+            pieces.append("WITHVERSION")
+
+    @staticmethod
+    def appendWithFlags(pieces, withflags):
+        if withflags:
+            pieces.append("WITHFLAGS")
+
+    @staticmethod
+    def appendNoNegative(pieces, nonegative):
+        if nonegative:
+            pieces.append("NONEGATIVE")
+
+    # ###################################### tairHash Function ######################################################
+
     def exhset(self, name, field, value, ex=None, exat=None, px=None, pxat=None,
                nx=False, xx=False, ver=None, abs=None, noactive=False):
         """
@@ -110,9 +145,9 @@ class Client(Redis):
         :param name: same as hash's key
         :param field: same as hash's field
         :param value: same as hash's value
-        :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+        :param ex: set an expire flag on field for ``ex`` seconds.
         :param exat: Set the absolute expiration time for a field in milliseconds
-        :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+        :param px: set an expire flag on field  for ``ex`` milliseconds.
         :param pxat: set the absolute expiration time for a field in seconds
         :param nx: if field does not exist, it will be created automatically
         :param xx: only if field already exist, it will be set to replace old one
@@ -166,7 +201,7 @@ class Client(Redis):
         :param noactive: Setting NOACTIVE means that the field does not use active expiration strategy
         :return:
         """
-        pieces = [name, field, pxat]
+        pieces = [name, field, int(pxat.timestamp() * 1000) if isinstance(pxat, datetime) else pxat]
         self.appendVer(pieces, ver)
         self.appendAbs(pieces, abs)
         self.appendNoActive(pieces, noactive)
@@ -177,13 +212,13 @@ class Client(Redis):
         set the relative expiration time for a field in the TairHash specified by the key, in milliseconds.
         :param name: same as hash's key
         :param field: same as hash's field
-        :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+        :param px: set an expire flag on field for ``ex`` milliseconds.
         :param ver: set the field's version
         :param abs: set the absolute field's version
         :param noactive: Setting NOACTIVE means that the field does not use active expiration strategy
         :return:
         """
-        pieces = [name, field, px]
+        pieces = [name, field, int(px.total_seconds() * 1000) if isinstance(px, timedelta) else px]
         self.appendVer(pieces, ver)
         self.appendAbs(pieces, abs)
         self.appendNoActive(pieces, noactive)
@@ -200,7 +235,7 @@ class Client(Redis):
         :param noactive: Setting NOACTIVE means that the field does not use active expiration strategy
         :return:
         """
-        pieces = [name, field, exat]
+        pieces = [name, field, int(exat.timestamp()) if isinstance(exat, datetime) else exat]
         self.appendVer(pieces, ver)
         self.appendAbs(pieces, abs)
         self.appendNoActive(pieces, noactive)
@@ -211,13 +246,13 @@ class Client(Redis):
         set the relative expiration time for a field in the TairHash specified by the key, in seconds.
         :param name: same as hash's key
         :param field: same as hash's field
-        :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+        :param ex: set an expire flag on field for ``ex`` seconds.
         :param ver: set the field's version
         :param abs: set the absolute field's version
         :param noactive: Setting NOACTIVE means that the field does not use active expiration strategy
         :return:
         """
-        pieces = [name, field, ex]
+        pieces = [name, field, int(ex.total_seconds()) if isinstance(ex, timedelta) else ex]
         self.appendVer(pieces, ver)
         self.appendAbs(pieces, abs)
         self.appendNoActive(pieces, noactive)
@@ -270,9 +305,9 @@ class Client(Redis):
         :param name: same as hash's key
         :param field: same as hash's field
         :param digit: int value which will be incr for the field
-        :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+        :param ex: set an expire flag on field for ``ex`` seconds.
         :param exat: Set the absolute expiration time for a field in milliseconds
-        :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+        :param px: set an expire flag on field for ``ex`` milliseconds.
         :param pxat: set the absolute expiration time for a field in seconds
         :param nx: if field does not exist, it will be created automatically
         :param xx: only if field already exist, it will be set to replace old one
@@ -301,9 +336,9 @@ class Client(Redis):
         :param name: same as hash's key
         :param field: same as hash's field
         :param floating: float value which will be incr for the field
-        :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+        :param ex: set an expire flag on field for ``ex`` seconds.
         :param exat: Set the absolute expiration time for a field in milliseconds
-        :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+        :param px: set an expire flag on field for ``ex`` milliseconds.
         :param pxat: set the absolute expiration time for a field in seconds
         :param nx: if field does not exist, it will be created automatically
         :param xx: only if field already exist, it will be set to replace old one
@@ -386,7 +421,7 @@ class Client(Redis):
         """
         return self.execute_command(self.TAIRHASH_EXHEXISTS, name, field)
 
-    def exhserlen(self, name, field):
+    def exhstrlen(self, name, field):
         """
         Get the length of the value of a field in TairHash specified by key.
         :param name: same as hash's key
@@ -434,6 +469,234 @@ class Client(Redis):
         if count is not None:
             pieces.extend(['COUNT', count])
         return self.execute_command(self.TAIRHASH_EXHSCAN, *pieces)
+
+    def exhscan_ee(self, name, op, subkey, match=None, count=None):
+        """
+        Used to support the scan operation of the enterprise version of tair
+        :param name: same as hash's key
+        :param op: Used to locate the starting point of the scan
+        :param subkey: Used in conjunction with the op option to set the scanning start position
+        :param match: Used to filter scan results.
+        :param count: The number of values returned each time
+        :return:
+        """
+        pieces = [name, op, subkey]
+        if match is not None:
+            pieces.extend(['MATCH', match])
+        if count is not None:
+            pieces.extend(['COUNT', count])
+        return self.execute_command(self.TAIRHASH_EXHSCAN_EE, *pieces)
+
+    # ###################################### tairString Function ######################################################
+
+    # def cas(self, name, old_value, value, ex=None, exat=None, px=None, pxat=None):
+    #     """
+    #     CAS (Compare And Set), when the current value of the string corresponding to the key is equal to
+    #     the old_value, the value is set to value
+    #     :param name: same as string's key
+    #     :param old_value: same as string's value
+    #     :param value: new string's value
+    #     :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+    #     :param exat: Set the absolute expiration time for a key ``name`` in milliseconds
+    #     :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+    #     :param pxat: set the absolute expiration time for a key ``name`` in seconds
+    #     :return:
+    #     """
+    #     pieces = [name, old_value, value]
+    #
+    #     self.appendExpire(pieces, ex, exat, px, pxat)
+    #     return self.execute_command(self.TAIRSTRING_CAS, *pieces)
+    #
+    # def cad(self, name, value):
+    #     """
+    #     CAD (Compare And Delete), delete the Key when the value is equal to the value in the engine
+    #     :param name: same as string's key
+    #     :param value: same as string's value
+    #     :return:
+    #     """
+    #     return self.execute_command(self.TAIRSTRING_CAD, name, value)
+    #
+    # def exset(self, name, value, ex=None, exat=None, px=None, pxat=None,
+    #           nx=False, xx=False, ver=None, abs=None, flags=None, withversion=False):
+    #     """
+    #     Save the value to the key ``name`` in module tairString.
+    #     :param name: same as string's key
+    #     :param value: same as string's value
+    #     :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+    #     :param exat: Set the absolute expiration time for a key ``name`` in milliseconds
+    #     :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+    #     :param pxat: set the absolute expiration time for a key ``name`` in seconds
+    #     :param nx: if key ``name`` does not exist, it will be created automatically
+    #     :param xx: only if key ``name`` already exist, it will be set to replace old one
+    #     :param ver: set the key ``name``s version
+    #     :param abs: set the absolute key ``name``'s version
+    #     :param flags: The type is uint32_t to support the memcached protocol. flags <= UINT_MAX, default = 0 .
+    #     :param withversion: Modify the return value to version instead of "OK"
+    #     :return:
+    #     """
+    #     pieces = [name, value]
+    #
+    #     self.appendExpire(pieces, ex, exat, px, pxat)
+    #     self.appendExists(pieces, nx, xx)
+    #     self.appendVer(pieces, ver)
+    #     self.appendAbs(pieces, abs)
+    #     self.appendFlags(pieces, flags)
+    #     self.appendWithVersion(pieces, withversion)
+    #     return self.execute_command(self.TAIRSTRING_EXSET, *pieces)
+    #
+    # def exget(self, name, withflags=False):
+    #     """
+    #     Return the value and version of TairString.
+    #     :param name: same as string's key
+    #     :param withflags:
+    #     :return:
+    #     """
+    #     pieces = [name]
+    #
+    #     self.appendWithFlags(pieces, withflags)
+    #     return self.execute_command(self.TAIRSTRING_EXGET, *pieces)
+    #
+    # def exsetver(self, name, ver):
+    #     """
+    #     Set the version directly on a key.
+    #     :param name: same as string's key
+    #     :param ver: set the key ``name``'s version
+    #     :return:
+    #     """
+    #     return self.execute_command(self.TAIRSTRING_EXSETVER, name, ver)
+    #
+    # def exincrby(self, name, digit, ex=None, exat=None, px=None, pxat=None,
+    #              nx=False, xx=False, ver=None, abs=None, minval=None, maxval=None,
+    #              nonegative=False, withversion=False):
+    #     """
+    #     Auto-increment and auto-decrement operations are performed on Key, and the range of num is long.
+    #     :param name: same as string's key
+    #     :param digit: int value which will be incr for the key
+    #     :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+    #     :param exat: Set the absolute expiration time for a key ``name`` in milliseconds
+    #     :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+    #     :param pxat: set the absolute expiration time for a key ``name`` in seconds
+    #     :param nx: if key ``name`` does not exist, it will be created automatically
+    #     :param xx: only if key ``name`` already exist, it will be set to replace old one
+    #     :param ver: set the key ``name``'s version
+    #     :param abs: set the absolute key ``name``'s version
+    #     :param minval: The minimum value of value. If it is less than this value, an exception will be prompted.
+    #     :param maxval: The maximum value of value. If it is more than this value, an exception will be prompted.
+    #     :param nonegative: After setting, if the result of incrby is less than 0, set value to 0
+    #     :param withversion: Return version in additional
+    #     :return:
+    #     """
+    #     pieces = [name, digit]
+    #
+    #     self.appendExpire(pieces, ex, exat, px, pxat)
+    #     self.appendExists(pieces, nx, xx)
+    #     self.appendVer(pieces, ver)
+    #     self.appendAbs(pieces, abs)
+    #     self.appendMinVal(pieces, minval)
+    #     self.appendMaxVal(pieces, maxval)
+    #     self.appendNoNegative(pieces, nonegative)
+    #     self.appendWithVersion(pieces, withversion)
+    #     return self.execute_command(self.TAIRSTRING_EXINCRBY, *pieces)
+    #
+    # def exincrbyfloat(self, name, floating, ex=None, exat=None, px=None, pxat=None,
+    #                   nx=False, xx=False, ver=None, abs=None, minval=None, maxval=None):
+    #     """
+    #     Auto-increment or decrement the Key, and the range of num is double.
+    #     :param name: same as string's key
+    #     :param floating: float value which will be incr for the key
+    #     :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+    #     :param exat: Set the absolute expiration time for a key ``name`` in milliseconds
+    #     :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+    #     :param pxat: set the absolute expiration time for a key ``name`` in seconds
+    #     :param nx: if key ``name`` does not exist, it will be created automatically
+    #     :param xx: only if key ``name`` already exist, it will be set to replace old one
+    #     :param ver: set the key ``name``'s version
+    #     :param abs: set the absolute key ``name``'s version
+    #     :param minval: The minimum value of value. If it is less than this value, an exception will be prompted.
+    #     :param maxval: The maximum value of value. If it is more than this value, an exception will be prompted.
+    #     :return:
+    #     """
+    #     pieces = [name, floating]
+    #
+    #     self.appendExpire(pieces, ex, exat, px, pxat)
+    #     self.appendExists(pieces, nx, xx)
+    #     self.appendVer(pieces, ver)
+    #     self.appendAbs(pieces, abs)
+    #     self.appendMinVal(pieces, minval)
+    #     self.appendMaxVal(pieces, maxval)
+    #     return self.execute_command(self.TAIRSTRING_EXINCRBYFLOAT, *pieces)
+    #
+    # def excas(self, name, value, ver):
+    #     """
+    #     Specify the version to update the value. When the version in the engine is the same as the specified version,
+    #     the update is successful. If it fails, the old value and version will be returned.
+    #     :param name: same as string's key
+    #     :param value: same as string's value
+    #     :param ver: set the key ``name``'s version
+    #     :return:
+    #     """
+    #     return self.execute_command(self.TAIRSTRING_EXCAS, name, value, ver)
+    #
+    # def excad(self, name, ver):
+    #     """
+    #     Delete the Key when the specified version is equal to the version in the engine, otherwise it will fail.
+    #     :param name: same as string's key
+    #     :param ver: set the key ``name``'s version
+    #     :return:
+    #     """
+    #     return self.execute_command(self.TAIRSTRING_EXCAD, name, ver)
+    #
+    # def exappend(self, name, value, nx=False, xx=False, ver=None, abs=None):
+    #     """
+    #     Append string to key
+    #     Save the value to the key ``name`` in module tairString.
+    #     :param name: same as string's key
+    #     :param value: same as string's value
+    #     :param nx: if key ``name`` does not exist, it will be created automatically
+    #     :param xx: only if key ``name`` already exist, it will be set to replace old one
+    #     :param ver: set the key ``name``s version
+    #     :param abs: set the absolute key ``name``'s version
+    #     :return:
+    #     """
+    #     pieces = [name, value]
+    #     self.appendExists(pieces, nx, xx)
+    #     self.appendVer(pieces, ver)
+    #     self.appendAbs(pieces, abs)
+    #     return self.execute_command(self.TAIRSTRING_EXAPPEND, *pieces)
+    #
+    # def exprepend(self, name, value, nx=False, xx=False, ver=None, abs=None):
+    #     """
+    #     Perform string prepend operation on key
+    #     Save the value to the key ``name`` in module tairString.
+    #     :param name: same as string's key
+    #     :param value: same as string's value
+    #     :param nx: if key ``name`` does not exist, it will be created automatically
+    #     :param xx: only if key ``name`` already exist, it will be set to replace old one
+    #     :param ver: set the key ``name``s version
+    #     :param abs: set the absolute key ``name``'s version
+    #     :return:
+    #     """
+    #     pieces = [name, value]
+    #     self.appendExists(pieces, nx, xx)
+    #     self.appendVer(pieces, ver)
+    #     self.appendAbs(pieces, abs)
+    #     return self.execute_command(self.TAIRSTRING_EXPREPEND, *pieces)
+    #
+    # def exgae(self, name, ex=None, exat=None, px=None, pxat=None):
+    #     """
+    #     GAE(Get And Expire),Return the value+version+flags of TairString, and set the expire of the key.
+    #     This command will not increase version
+    #     Save the value to the key ``name`` in module tairString.
+    #     :param name: same as string's key
+    #     :param ex: set an expire flag on key ``name`` for ``ex`` seconds.
+    #     :param exat: Set the absolute expiration time for a key ``name`` in milliseconds
+    #     :param px: set an expire flag on key ``name`` for ``ex`` milliseconds.
+    #     :param pxat: set the absolute expiration time for a key ``name`` in seconds
+    #     :return:
+    #     """
+    #     pieces = [name]
+    #     self.appendExpire(pieces, ex, exat, px, pxat)
+    #     return self.execute_command(self.TAIRSTRING_EXGAE, *pieces)
 
     def pipeline(self, transaction=True, shard_hint=None):
         """
